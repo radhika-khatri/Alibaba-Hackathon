@@ -1,0 +1,9 @@
+fastapi==0.111.0
+uvicorn==0.30.1
+python-dotenv==1.0.1
+pydantic==2.8.2
+oss2==2.18.4
+requests==2.32.3
+pinecone==5.0.0
+SQLAlchemy==2.0.32
+asyncpg==0.29.0
