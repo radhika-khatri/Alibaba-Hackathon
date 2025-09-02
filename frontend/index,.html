@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alibaba Support Agent</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            background: #1E1E1E;
+            min-height: 100vh;
+        }
+        
+        .glass-effect {
+            background: rgba(45, 45, 45, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(75, 75, 75, 0.3);
+        }
+        
+        .message-animation {
+            animation: fadeInUp 0.3s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .typing-indicator {
+            animation: pulse 1.5s infinite;
+        }
+        
+        .file-upload-area {
+            border: 2px dashed #4B5563;
+            transition: all 0.3s ease;
+            background: rgba(55, 55, 55, 0.5);
+        }
+        
+        .file-upload-area:hover,
+        .file-upload-area.dragover {
+            border-color: #06B6D4;
+            background-color: rgba(6, 182, 212, 0.1);
+        }
+        
+        .scroll-smooth {
+            scroll-behavior: smooth;
+        }
+        
+        .admin-panel {
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            background: #2D2D2D;
+        }
+        
+        .admin-panel.open {
+            transform: translateX(0);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #06B6D4 0%, #0891B2 100%);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #0891B2 0%, #0E7490 100%);
+        }
+
+        .accent-gradient {
+            background: linear-gradient(135deg, #06B6D4 0%, #0891B2 100%);
+        }
+
+        .terminal-border {
+            border: 1px solid #4B5563;
+        }
+
+        .terminal-input {
+            background: rgba(55, 55, 55, 0.8);
+            border: 1px solid #4B5563;
+            color: #E5E7EB;
+        }
+
+        .terminal-input:focus {
+            border-color: #06B6D4;
+            background: rgba(55, 55, 55, 0.9);
+        }
+
+        .status-online {
+            color: #10B981;
+        }
+
+        .status-offline {
+            color: #EF4444;
+        }
+
+        .info-panel {
+            background: rgba(6, 182, 212, 0.1);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+
+        .warning-panel {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+    </style>
+</head>
+<body class="font-sans bg-gray-900">
+    <div class="chat-container flex">
+        <!-- Main Chat Interface -->
+        <div class="flex-1 flex flex-col max-w-4xl mx-auto">
+            <!-- Header -->
+            <header class="glass-effect p-4 m-4 rounded-lg terminal-border">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 accent-gradient rounded-full flex items-center justify-center">
+                            <i class="fas fa-robot text-white"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold text-gray-100">Alibaba Support Agent</h1>
+                            <p class="text-gray-400 text-sm">AI-powered customer support</p>
+                        </div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button id="adminBtn" class="glass-effect p-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-600 hover:bg-opacity-50 transition-colors terminal-border">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                        <button id="clearBtn" class="glass-effect p-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-600 hover:bg-opacity-50 transition-colors terminal-border">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Chat Messages -->
+            <div id="chatContainer" class="flex-1 p-4 overflow-y-auto scroll-smooth">
+                <div id="messages" class="space-y-4">
+                    <!-- Welcome Message -->
+                    <div class="message-animation">
+                        <div class="flex items-start space-x-3">
+                            <div class="w-8 h-8 accent-gradient rounded-full flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-robot text-white text-xs"></i>
+                            </div>
+                            <div class="glass-effect p-4 rounded-lg max-w-md terminal-border">
+                                <p class="text-gray-100">Hello! I'm your Alibaba Support Agent. I can help you with orders, tracking, product issues, and more. You can type a message or upload a screenshot for assistance.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-4">
+                <div class="glass-effect rounded-lg p-4 terminal-border">
+                    <!-- File Upload Area -->
+                    <div id="uploadArea" class="file-upload-area rounded-lg p-4 mb-4 text-center hidden">
+                        <i class="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2"></i>
+                        <p class="text-gray-400">Drop an image here or click to browse</p>
+                        <input type="file" id="fileInput" accept="image/*" class="hidden">
+                    </div>
+
+                    <!-- Preview Area -->
+                    <div id="previewArea" class="mb-4 hidden">
+                        <div class="relative inline-block">
+                            <img id="previewImage" class="max-w-xs rounded-lg shadow-lg terminal-border">
+                            <button id="removeImage" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Input Row -->
+                    <div class="flex items-center space-x-3">
+                        <button id="attachBtn" class="p-2 text-gray-400 hover:text-cyan-400 transition-colors">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                        <div class="flex-1 relative">
+                            <input 
+                                id="messageInput" 
+                                type="text" 
+                                placeholder="Type your message or describe your issue..."
+                                class="terminal-input w-full rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400 placeholder-gray-500"
+                            >
+                        </div>
+                        <button id="sendBtn" class="btn-primary text-white p-3 rounded-lg hover:opacity-90 transition-all duration-200 disabled:opacity-50">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Panel -->
+        <div id="adminPanel" class="admin-panel fixed right-0 top-0 h-full w-96 shadow-2xl z-50 border-l border-gray-600">
+            <div class="p-6 h-full overflow-y-auto">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold text-gray-100">Admin Panel</h2>
+                    <button id="closeAdminBtn" class="text-gray-400 hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- API Configuration -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold mb-3 text-gray-200">API Configuration</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-1">API Base URL</label>
+                            <input id="apiUrl" type="text" value="http://localhost:8000" class="terminal-input w-full rounded-lg px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-1">User ID</label>
+                            <input id="userId" type="text" value="user-123" class="terminal-input w-full rounded-lg px-3 py-2 text-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Knowledge Base Management -->
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold mb-3 text-gray-200">Knowledge Base</h3>
+                    <div class="space-y-3">
+                        <textarea id="kbText" placeholder="Enter knowledge base content..." class="terminal-input w-full rounded-lg px-3 py-2 text-sm h-32 resize-none"></textarea>
+                        <input id="kbTitle" type="text" placeholder="Title" class="terminal-input w-full rounded-lg px-3 py-2 text-sm">
+                        <input id="kbUrl" type="text" placeholder="URL (optional)" class="terminal-input w-full rounded-lg px-3 py-2 text-sm">
+                        <button id="addKbBtn" class="btn-primary w-full text-white py-2 rounded-lg hover:opacity-90 transition-colors">
+                            <i class="fas fa-plus mr-2"></i>Add to Knowledge Base
+                        </button>
+                    </div>
+                </div>
+
+                <!-- System Status -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-3 text-gray-200">System Status</h3>
+                    <div id="systemStatus" class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">API Status:</span>
+                            <span id="apiStatus" class="text-gray-400">Checking...</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Last Request:</span>
+                            <span id="lastRequest" class="text-gray-400">None</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overlay -->
+        <div id="adminOverlay" class="fixed inset-0 bg-black bg-opacity-60 z-40 hidden"></div>
+    </div>
+
+    <script>
+        class SupportChatbot {
+            constructor() {
+                this.apiUrl = 'http://localhost:8000';
+                this.userId = 'user-123';
+                this.currentImage = null;
+                this.messages = [];
+                
+                this.initializeElements();
+                this.attachEventListeners();
+                this.checkApiStatus();
+            }
+
+            initializeElements() {
+                this.elements = {
+                    messageInput: document.getElementById('messageInput'),
+                    sendBtn: document.getElementById('sendBtn'),
+                    attachBtn: document.getElementById('attachBtn'),
+                    fileInput: document.getElementById('fileInput'),
+                    uploadArea: document.getElementById('uploadArea'),
+                    previewArea: document.getElementById('previewArea'),
+                    previewImage: document.getElementById('previewImage'),
+                    removeImage: document.getElementById('removeImage'),
+                    messages: document.getElementById('messages'),
+                    chatContainer: document.getElementById('chatContainer'),
+                    clearBtn: document.getElementById('clearBtn'),
+                    adminBtn: document.getElementById('adminBtn'),
+                    adminPanel: document.getElementById('adminPanel'),
+                    adminOverlay: document.getElementById('adminOverlay'),
+                    closeAdminBtn: document.getElementById('closeAdminBtn'),
+                    apiUrl: document.getElementById('apiUrl'),
+                    userId: document.getElementById('userId'),
+                    addKbBtn: document.getElementById('addKbBtn'),
+                    kbText: document.getElementById('kbText'),
+                    kbTitle: document.getElementById('kbTitle'),
+                    kbUrl: document.getElementById('kbUrl'),
+                    apiStatus: document.getElementById('apiStatus'),
+                    lastRequest: document.getElementById('lastRequest')
+                };
+            }
+
+            attachEventListeners() {
+                // Send message
+                this.elements.sendBtn.addEventListener('click', () => this.sendMessage());
+                this.elements.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.sendMessage();
+                });
+
+                // File upload
+                this.elements.attachBtn.addEventListener('click', () => {
+                    this.elements.uploadArea.classList.toggle('hidden');
+                    this.elements.fileInput.click();
+                });
+
+                this.elements.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+                this.elements.removeImage.addEventListener('click', () => this.removeImage());
+
+                // Drag and drop
+                this.elements.uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.add('dragover');
+                });
+
+                this.elements.uploadArea.addEventListener('dragleave', (e) => {
+                    e.currentTarget.classList.remove('dragover');
+                });
+
+                this.elements.uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('dragover');
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        this.handleFile(files[0]);
+                    }
+                });
+
+                this.elements.uploadArea.addEventListener('click', () => {
+                    this.elements.fileInput.click();
+                });
+
+                // Admin panel
+                this.elements.adminBtn.addEventListener('click', () => this.openAdminPanel());
+                this.elements.closeAdminBtn.addEventListener('click', () => this.closeAdminPanel());
+                this.elements.adminOverlay.addEventListener('click', () => this.closeAdminPanel());
+
+                // Clear chat
+                this.elements.clearBtn.addEventListener('click', () => this.clearChat());
+
+                // Knowledge base
+                this.elements.addKbBtn.addEventListener('click', () => this.addKnowledgeBase());
+
+                // API configuration
+                this.elements.apiUrl.addEventListener('change', (e) => {
+                    this.apiUrl = e.target.value;
+                    this.checkApiStatus();
+                });
+                this.elements.userId.addEventListener('change', (e) => {
+                    this.userId = e.target.value;
+                });
+            }
+
+            async checkApiStatus() {
+                try {
+                    const response = await fetch(`${this.apiUrl}/health`);
+                    if (response.ok) {
+                        this.elements.apiStatus.textContent = 'Online';
+                        this.elements.apiStatus.className = 'status-online';
+                    } else {
+                        throw new Error('API not responding');
+                    }
+                } catch (error) {
+                    this.elements.apiStatus.textContent = 'Offline';
+                    this.elements.apiStatus.className = 'status-offline';
+                }
+            }
+
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    this.handleFile(file);
+                }
+            }
+
+            handleFile(file) {
+                if (!file.type.startsWith('image/')) {
+                    this.showError('Please select an image file');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.elements.previewImage.src = e.target.result;
+                    this.elements.previewArea.classList.remove('hidden');
+                    this.elements.uploadArea.classList.add('hidden');
+                    this.currentImage = file;
+                };
+                reader.readAsDataURL(file);
+            }
+
+            removeImage() {
+                this.elements.previewArea.classList.add('hidden');
+                this.elements.uploadArea.classList.add('hidden');
+                this.currentImage = null;
+                this.elements.fileInput.value = '';
+            }
+
+            async uploadImage(file) {
+                try {
+                    // Get presigned URL
+                    const presignResponse = await fetch(`${this.apiUrl}/presign-upload`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            content_type: file.type,
+                            prefix: 'screenshots'
+                        })
+                    });
+
+                    if (!presignResponse.ok) {
+                        throw new Error('Failed to get upload URL');
+                    }
+
+                    const presignData = await presignResponse.json();
+
+                    // Upload to OSS
+                    const uploadResponse = await fetch(presignData.upload_url, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': file.type },
+                        body: file
+                    });
+
+                    if (!uploadResponse.ok) {
+                        throw new Error('Failed to upload image');
+                    }
+
+                    return presignData.file_url;
+                } catch (error) {
+                    throw new Error(`Upload failed: ${error.message}`);
+                }
+            }
+
+            async sendMessage() {
+                const message = this.elements.messageInput.value.trim();
+                
+                if (!message && !this.currentImage) {
+                    return;
+                }
+
+                this.elements.sendBtn.disabled = true;
+                this.elements.messageInput.disabled = true;
+
+                try {
+                    // Add user message
+                    this.addMessage('user', message, this.currentImage ? this.elements.previewImage.src : null);
+                    
+                    // Clear input
+                    this.elements.messageInput.value = '';
+                    
+                    // Show typing indicator
+                    this.showTypingIndicator();
+
+                    let imageUrl = null;
+                    
+                    // Upload image if present
+                    if (this.currentImage) {
+                        try {
+                            imageUrl = await this.uploadImage(this.currentImage);
+                            this.removeImage();
+                        } catch (error) {
+                            this.hideTypingIndicator();
+                            this.showError(`Image upload failed: ${error.message}`);
+                            return;
+                        }
+                    }
+
+                    // Submit to API
+                    const response = await fetch(`${this.apiUrl}/submit-screenshot`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user_id: this.userId,
+                            image_url: imageUrl,
+                            initial_message: message,
+                            top_k: 5
+                        })
+                    });
+
+                    this.elements.lastRequest.textContent = new Date().toLocaleTimeString();
+
+                    if (!response.ok) {
+                        throw new Error(`API error: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    
+                    this.hideTypingIndicator();
+                    
+                    // Add bot response with extracted data
+                    this.addBotResponse(data);
+
+                } catch (error) {
+                    this.hideTypingIndicator();
+                    this.showError(`Error: ${error.message}`);
+                } finally {
+                    this.elements.sendBtn.disabled = false;
+                    this.elements.messageInput.disabled = false;
+                    this.elements.messageInput.focus();
+                }
+            }
+
+            addMessage(sender, text, imageUrl = null) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message-animation';
+                
+                const isUser = sender === 'user';
+                const alignClass = isUser ? 'justify-end' : 'justify-start';
+                const bgClass = isUser ? 'bg-gray-700 border border-gray-600' : 'glass-effect terminal-border';
+                
+                messageDiv.innerHTML = `
+                    <div class="flex ${alignClass} items-start space-x-3">
+                        ${!isUser ? `
+                            <div class="w-8 h-8 accent-gradient rounded-full flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-robot text-white text-xs"></i>
+                            </div>
+                        ` : ''}
+                        <div class="${bgClass} p-4 rounded-lg max-w-md ${isUser ? 'ml-auto' : ''}">
+                            ${imageUrl ? `<img src="${imageUrl}" class="max-w-full rounded-lg mb-2 shadow-lg terminal-border">` : ''}
+                            ${text ? `<p class="text-gray-100">${text}</p>` : ''}
+                        </div>
+                        ${isUser ? `
+                            <div class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 border border-gray-500">
+                                <i class="fas fa-user text-gray-200 text-xs"></i>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+                
+                this.elements.messages.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            addBotResponse(data) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message-animation';
+                
+                let extractedInfo = '';
+                if (data.extracted) {
+                    const fields = Object.entries(data.extracted)
+                        .filter(([_, value]) => value)
+                        .map(([key, value]) => `<strong class="text-cyan-300">${key.replace('_', ' ')}:</strong> <span class="text-gray-200">${value}</span>`)
+                        .join('<br>');
+                    
+                    if (fields) {
+                        extractedInfo = `
+                            <div class="info-panel rounded-lg p-3 mb-3">
+                                <div class="text-xs text-cyan-300 mb-1">📋 Extracted Information:</div>
+                                <div class="text-sm">${fields}</div>
+                            </div>
+                        `;
+                    }
+                }
+
+                let kbInfo = '';
+                if (data.kb && data.kb.length > 0) {
+                    const docs = data.kb.slice(0, 3).map(doc => 
+                        `<div class="text-xs text-gray-400">📚 ${doc.title || 'Knowledge Base'} (${(doc.score * 100).toFixed(1)}%)</div>`
+                    ).join('');
+                    
+                    kbInfo = `
+                        <div class="warning-panel rounded-lg p-3 mb-3">
+                            <div class="text-xs text-yellow-300 mb-1">🔍 Related Information:</div>
+                            ${docs}
+                        </div>
+                    `;
+                }
+
+                messageDiv.innerHTML = `
+                    <div class="flex justify-start items-start space-x-3">
+                        <div class="w-8 h-8 accent-gradient rounded-full flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-robot text-white text-xs"></i>
+                        </div>
+                        <div class="glass-effect p-4 rounded-lg max-w-md terminal-border">
+                            ${extractedInfo}
+                            ${kbInfo}
+                            <p class="text-gray-100">${data.answer}</p>
+                        </div>
+                    </div>
+                `;
+                
+                this.elements.messages.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            showTypingIndicator() {
+                const typingDiv = document.createElement('div');
+                typingDiv.id = 'typingIndicator';
+                typingDiv.className = 'message-animation';
+                typingDiv.innerHTML = `
+                    <div class="flex justify-start items-start space-x-3">
+                        <div class="w-8 h-8 accent-gradient rounded-full flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-robot text-white text-xs"></i>
+                        </div>
+                        <div class="glass-effect p-4 rounded-lg terminal-border">
+                            <div class="typing-indicator flex space-x-1">
+                                <div class="w-2 h-2 bg-cyan-400 rounded-full opacity-40"></div>
+                                <div class="w-2 h-2 bg-cyan-400 rounded-full opacity-60"></div>
+                                <div class="w-2 h-2 bg-cyan-400 rounded-full opacity-80"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                this.elements.messages.appendChild(typingDiv);
+                this.scrollToBottom();
+            }
+
+            hideTypingIndicator() {
+                const typingIndicator = document.getElementById('typingIndicator');
+                if (typingIndicator) {
+                    typingIndicator.remove();
+                }
+            }
+
+            showError(message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'message-animation';
+                errorDiv.innerHTML = `
+                    <div class="flex justify-start items-start space-x-3">
+                        <div class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-exclamation-triangle text-white text-xs"></i>
+                        </div>
+                        <div class="bg-red-900 bg-opacity-50 border border-red-500 p-4 rounded-lg max-w-md">
+                            <p class="text-red-200">${message}</p>
+                        </div>
+                    </div>
+                `;
+                this.elements.messages.appendChild(errorDiv);
+                this.scrollToBottom();
+            }
+
+            scrollToBottom() {
+                setTimeout(() => {
+                    this.elements.chatContainer.scrollTop = this.elements.chatContainer.scrollHeight;
+                }, 100);
+            }
+
+            clearChat() {
+                // Keep welcome message
+                const welcomeMessage = this.elements.messages.firstElementChild;
+                this.elements.messages.innerHTML = '';
+                this.elements.messages.appendChild(welcomeMessage);
+                this.messages = [];
+                this.removeImage();
+            }
+
+            openAdminPanel() {
+                this.elements.adminPanel.classList.add('open');
+                this.elements.adminOverlay.classList.remove('hidden');
+            }
+
+            closeAdminPanel() {
+                this.elements.adminPanel.classList.remove('open');
+                this.elements.adminOverlay.classList.add('hidden');
+            }
+
+            async addKnowledgeBase() {
+                const text = this.elements.kbText.value.trim();
+                const title = this.elements.kbTitle.value.trim();
+                const url = this.elements.kbUrl.value.trim();
+
+                if (!text) {
+                    alert('Please enter some text content');
+                    return;
+                }
+
+                try {
+                    this.elements.addKbBtn.disabled = true;
+                    this.elements.addKbBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Adding...';
+
+                    const response = await fetch(`${this.apiUrl}/kb/upsert`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify([{
+                            title: title || 'Untitled',
+                            text: text,
+                            url: url || null
+                        }])
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to add knowledge: ${response.status}`);
+                    }
+
+                    // Clear form
+                    this.elements.kbText.value = '';
+                    this.elements.kbTitle.value = '';
+                    this.elements.kbUrl.value = '';
+
+                    alert('Knowledge base updated successfully!');
+
+                } catch (error) {
+                    alert(`Error: ${error.message}`);
+                } finally {
+                    this.elements.addKbBtn.disabled = false;
+                    this.elements.addKbBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Add to Knowledge Base';
+                }
+            }
+        }
+
+        // Initialize the chatbot when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new SupportChatbot();
+        });
+    </script>
+</body>
+</html>
