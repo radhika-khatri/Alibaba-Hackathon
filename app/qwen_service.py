@@ -15,10 +15,9 @@ HEADERS = {
 "Content-Type": "application/json"
 }
 
-
-
-
 def qwen_vl_extract(image_url: str) -> dict:
+
+    print(f"Calling Qwen VL API with image URL: {image_url}")
     messages = [
         {"role": "system", "content": "Extract fields from images and ALWAYS return strict JSON only."},
         {
@@ -33,16 +32,30 @@ def qwen_vl_extract(image_url: str) -> dict:
         }
     ]
     payload = {"model": QWEN_VL_MODEL, "messages": messages, "temperature": 0.1}
-    r = requests.post(f"{QWEN_BASE_URL}/chat/completions", headers=HEADERS, json=payload, timeout=60)
-    r.raise_for_status()
-    content = r.json()["choices"][0]["message"]["content"].strip()
+    
     try:
-        if "{" in content and "}" in content:
-            content = content[content.find("{"): content.rfind("}")+1]
-        data = json.loads(content)
-    except Exception:
-        data = {}
-    return data
+        print(f"Sending request to Qwen API: {payload}")
+        r = requests.post(f"{QWEN_BASE_URL}/chat/completions", headers=HEADERS, json=payload, timeout=60)
+        r.raise_for_status()  # This will raise an exception for HTTP errors
+        content = r.json()["choices"][0]["message"]["content"].strip()
+        
+        try:
+            if "{" in content and "}" in content:
+                content = content[content.find("{"): content.rfind("}")+1]
+            data = json.loads(content)
+        except Exception:
+            data = {}
+        return data
+        
+    except requests.exceptions.HTTPError as e:
+        print(f"Qwen API HTTP error: {e}")
+        if e.response.status_code == 401:
+            raise Exception("Qwen API: Unauthorized - check your API key")
+        else:
+            raise Exception(f"Qwen API error: {e}")
+    except Exception as e:
+        print(f"Qwen API unexpected error: {e}")
+        raise Exception(f"Qwen API error: {e}")
 
 
 

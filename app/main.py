@@ -1,11 +1,15 @@
 # app/main.py
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from pydantic import ValidationError
 import uuid
 import json
 from typing import List
 
-from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,14 +25,25 @@ from app.models_db import KBItemDB, TicketDB
 
 # ⬇️ NEW: use OpenSearch service instead of Pinecone
 from app.opensearch_service import upsert_vectors, query_vector
+from app.wan_service import generate_video_from_text, generate_image_from_text
+from app.models_db import ChatMessageDB
 
-load_dotenv()
+from fastapi import UploadFile, File
+import pandas as pd
+from typing import List
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 
 app = FastAPI(title="Alibaba Support Agent API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.on_event("startup")
@@ -36,6 +51,18 @@ async def on_startup():
     # Create tables if not exist (ApsaraDB RDS for PostgreSQL)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str):
+    return {"status": "OK"}
 
 # ---------- health ----------
 @app.get("/health")
@@ -49,92 +76,147 @@ async def api_presign(body: PresignRequest):
         result = presign_upload(PresignParams(content_type=body.content_type, prefix=body.prefix))
         return PresignResponse(**result)
     except Exception as e:
-        raise HTTPException(500, f"OSS presign failed: {e}")
+        import traceback
+        print(traceback.format_exc())  # <-- print full error
+        raise HTTPException(status_code=500, detail=f"OSS presign failed: {e}")
+
 
 # ---------- KB ingest (text -> embeddings -> OpenSearch + Postgres metadata) ----------
-@app.post("/kb/upsert")
-async def kb_upsert(items: List[KBItem], session: AsyncSession = Depends(get_session)):
-    texts = [it.text for it in items]
-    embs = qwen_embed(texts)  # not strictly needed by opensearch_service, but OK to keep
+@app.post("/kb/upload-files")
+async def upload_kb_files(
+    files: List[UploadFile] = File(...),
+    session: AsyncSession = Depends(get_session)
+):
+    items = []
 
+    for file in files:
+        if file.filename.endswith(".csv"):
+            df = pd.read_csv(file.file)
+        elif file.filename.endswith(".json"):
+            df = pd.DataFrame(pd.read_json(file.file))
+        else:
+            continue  # skip unsupported files
+
+        for _, row in df.iterrows():
+            text = row.get("text") or ""
+            if not text.strip():
+                continue  # skip rows without text
+            items.append({
+                "id": row.get("id") or str(uuid.uuid4().hex),
+                "title": row.get("title"),
+                "url": row.get("url"),
+                "text": text
+            })
+
+    if not items:
+        return {"ok": False, "count": 0, "message": "No valid text found"}
+
+    # Generate embeddings
+    texts = [it["text"] for it in items]
+    embs = qwen_embed(texts)
+
+    # Store in Postgres + OpenSearch
     vectors = []
     for it, emb in zip(items, embs):
-        doc_id = it.id or uuid.uuid4().hex
         vectors.append({
-            "id": doc_id,
+            "id": it["id"],
             "values": emb,
-            "metadata": {
-                "title": it.title,
-                "url": it.url,
-                "text": it.text
-            }
+            "metadata": {"title": it.get("title"), "url": it.get("url"), "text": it["text"]}
         })
-        # upsert metadata in Postgres
-        db_item = KBItemDB(id=doc_id, title=it.title, url=it.url, text=it.text)
+        db_item = KBItemDB(id=it["id"], title=it.get("title"), url=it.get("url"), text=it["text"])
         await session.merge(db_item)
 
     await session.commit()
-    # store to Alibaba OpenSearch
     upsert_vectors(vectors)
-    return {"ok": True, "count": len(vectors)}
 
+    return {"ok": True, "count": len(items)}
 # ---------- submit screenshot (Qwen-VL → embed → OpenSearch RAG → Qwen chat → save ticket) ----------
 @app.post("/submit-screenshot", response_model=SubmitScreenshotResponse)
-async def submit_screenshot(body: SubmitScreenshotRequest, session: AsyncSession = Depends(get_session)):
-    # 1) Extract with Qwen-VL
-    extracted = qwen_vl_extract(body.image_url)
+async def submit_screenshot(request: Request, session: AsyncSession = Depends(get_session)):
+    try:
+        # Parse the JSON body
+        body_data = await request.json()
+        
+        # Validate the request against our model
+        body = SubmitScreenshotRequest(**body_data)
+        
+        print(f"Received request: {body.dict()}")
+        
+        # 1) Extract fields from image
+        extracted = qwen_vl_extract(body.image_url)
 
-    # 2) Build retrieval query
-    parts = [body.initial_message or ""]
-    for key in ("order_id", "tracking_no", "product_name", "issue_type"):
-        val = extracted.get(key)
-        if val:
-            parts.append(f"{key}: {val}")
-    query_text = "\n".join([p for p in parts if p]) or "customer support"
+        # 2) Build retrieval query and get evidence
+        parts = [body.initial_message or ""]
+        for key in ("order_id", "tracking_no", "product_name", "issue_type"):
+            val = extracted.get(key)
+            if val:
+                parts.append(f"{key}: {val}")
+        query_text = "\n".join([p for p in parts if p]) or "customer support"
 
-    # 3) Embedding + vector search (Alibaba OpenSearch)
-    vec = qwen_embed([query_text])[0]
-    search = query_vector(vec, top_k=body.top_k)
+        vec = qwen_embed([query_text])[0]
+        search = query_vector(vec, top_k=body.top_k)
 
-    kb_docs: List[KBDoc] = []
-    kb_doc_ids: List[str] = []
-    for m in search.matches or []:
-        meta = m.metadata or {}
-        kb_docs.append(KBDoc(
-            doc_id=m.id,
-            title=meta.get("title"),
-            url=meta.get("url"),
-            snippet=(meta.get("text") or "")[:500],
-            score=float(m.score or 0.0)
-        ))
-        kb_doc_ids.append(m.id)
+        kb_docs = []
+        kb_doc_ids = []
+        for m in search.matches or []:
+            meta = m.metadata or {}
+            kb_docs.append(KBDoc(
+                doc_id=m.id,
+                title=meta.get("title"),
+                url=meta.get("url"),
+                snippet=(meta.get("text") or "")[:500],
+                score=float(m.score or 0.0)
+            ))
+            kb_doc_ids.append(m.id)
 
-    # 4) Final answer via Qwen chat (RAG)
-    evidence_text = "\n\n".join([f"[Doc {i+1}] {d.title or ''}\n{d.snippet}" for i, d in enumerate(kb_docs)]) or "(no docs)"
-    messages = [
-        {"role": "system", "content": (
-            "You are the official support assistant. Be concise and helpful. "
-            "Use evidence when relevant. If low_confidence is true, ask a clarifying question first."
-        )},
-        {"role": "user", "content": (
-            f"USER_MESSAGE:\n{body.initial_message or '(none)'}\n\n"
-            f"EXTRACTED_FIELDS:\n{json.dumps(extracted, ensure_ascii=False)}\n\n"
-            f"EVIDENCE:\n{evidence_text}"
-        )}
-    ]
-    answer = qwen_chat(messages)
+        # 3) Generate Qwen chat answer
+        evidence_text = "\n\n".join([f"[Doc {i+1}] {d.title or ''}\n{d.snippet}" for i, d in enumerate(kb_docs)]) or "(no docs)"
+        messages = [
+            {"role": "system", "content": (
+                "You are the official support assistant. Be concise and helpful. "
+                "Use evidence when relevant."
+            )},
+            {"role": "user", "content": (
+                f"USER_MESSAGE:\n{body.initial_message or '(none)'}\n\n"
+                f"EXTRACTED_FIELDS:\n{json.dumps(extracted, ensure_ascii=False)}\n\n"
+                f"EVIDENCE:\n{evidence_text}"
+            )}
+        ]
+        answer_text = qwen_chat(messages)
 
-    # 5) Persist ticket in Postgres (ApsaraDB RDS)
-    ticket = TicketDB(
-        id=uuid.uuid4().hex,
-        user_id=body.user_id,
-        image_url=body.image_url,
-        extracted=extracted,
-        answer=answer,
-        kb_doc_ids=kb_doc_ids,
-    )
-    session.add(ticket)
-    await session.commit()
+        # 4) Persist ticket
+        ticket = TicketDB(
+            id=uuid.uuid4().hex,
+            user_id=body.user_id,
+            image_url=body.image_url,
+            extracted=extracted,
+            answer=answer_text,
+            kb_doc_ids=kb_doc_ids,
+        )
+        session.add(ticket)
+        await session.commit()
 
-    ef = ExtractedFields(**{k: extracted.get(k) for k in ExtractedFields.model_fields})
-    return SubmitScreenshotResponse(extracted=ef, kb=kb_docs, answer=answer)
+        # 5) Save chat message history (text)
+        chat_message = ChatMessageDB(
+            id=uuid.uuid4().hex,
+            user_id=body.user_id,
+            role="bot",
+            content_type="text",
+            content=answer_text
+        )
+        session.add(chat_message)
+        await session.commit()
+
+        ef = ExtractedFields(**{k: extracted.get(k) for k in ExtractedFields.model_fields})
+        return SubmitScreenshotResponse(
+            extracted=ef,
+            kb=kb_docs,
+            answer=answer_text
+        )
+        
+    except ValidationError as e:
+        print(f"Validation error: {e.errors()}")
+        raise HTTPException(status_code=422, detail=e.errors())
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -17,7 +17,7 @@ class SubmitScreenshotRequest(BaseModel):
     user_id: str
     image_url: str
     initial_message: Optional[str] = None
-    top_k: int = 4
+    top_k: int = Field(default=4, ge=1, le=10)
 
 
 class ExtractedFields(BaseModel):
