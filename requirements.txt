@@ -5,20 +5,21 @@ python-dotenv==1.0.1
 pydantic==2.9.2
 
 # Alibaba Cloud SDKs
-oss2==2.18.4              # For Object Storage Service (OSS)
+oss2==2.18.4
 aliyun-python-sdk-core-v3==2.13.33
-aliyun-python-sdk-opensearch==0.12.2   # For OpenSearch (vector DB alternative)
-PyMySQL==1.1.1            # For ApsaraDB RDS (MySQL engine)
+aliyun-python-sdk-opensearch==0.12.2
+PyMySQL==1.1.1
 
 # LLM + HTTP
 requests==2.32.3
 
-# Optional (if using SQLAlchemy ORM with MySQL)
+# Optional (SQLAlchemy ORM)
 SQLAlchemy==2.0.32
-
-# Visualization (for flowcharts/diagrams)
-graphviz==0.20.3          # Generate DOT diagrams
-pydot==2.0.0              # Alternative DOT parser/renderer
-
 asyncpg==0.29.0
 
+# Visualization
+graphviz==0.20.3
+pydot==2.0.0
+
+# Alibaba Cloud OpenSearch vector store (needed for LangChain)
+alibabacloud-ha3engine-vector==1.1.1

@@ -1,0 +1,78 @@
+[
+    {
+      "id": 1,
+      "name": "Eco-Friendly Water Bottle",
+      "text": "A reusable stainless steel water bottle that keeps drinks cold for 24 hours and hot for 12 hours."
+    },
+    {
+      "id": 2,
+      "name": "Noise Cancelling Headphones",
+      "text": "Over-ear headphones with active noise cancellation and 30-hour battery life."
+    },
+    {
+      "id": 3,
+      "name": "Smart Fitness Tracker",
+      "text": "Tracks steps, heart rate, sleep, and workouts with a sleek OLED display."
+    },
+    {
+      "id": 4,
+      "name": "Wireless Bluetooth Speaker",
+      "text": "Portable speaker with deep bass, waterproof design, and 15-hour playtime."
+    },
+    {
+      "id": 5,
+      "name": "Ergonomic Office Chair",
+      "text": "Adjustable chair with lumbar support, breathable mesh back, and 360-degree swivel."
+    },
+    {
+      "id": 6,
+      "name": "Mechanical Keyboard",
+      "text": "RGB backlit mechanical keyboard with blue switches and customizable keys."
+    },
+    {
+      "id": 7,
+      "name": "Smartphone Gimbal",
+      "text": "3-axis handheld stabilizer for smooth video recording and motion tracking."
+    },
+    {
+      "id": 8,
+      "name": "Electric Toothbrush",
+      "text": "Rechargeable toothbrush with 5 cleaning modes and a 2-minute smart timer."
+    },
+    {
+      "id": 9,
+      "name": "4K Action Camera",
+      "text": "Compact waterproof action camera with image stabilization and wide-angle lens."
+    },
+    {
+      "id": 10,
+      "name": "Portable Power Bank",
+      "text": "High-capacity 20,000mAh power bank with fast charging and dual USB ports."
+    },
+    {
+      "id": 11,
+      "name": "Smart Home Hub",
+      "text": "Voice-controlled hub that connects and automates lights, thermostats, and devices."
+    },
+    {
+      "id": 12,
+      "name": "Drone with Camera",
+      "text": "Quadcopter drone with 1080p HD camera, GPS return, and 25-minute flight time."
+    },
+    {
+      "id": 13,
+      "name": "Gaming Mouse",
+      "text": "Ergonomic wired gaming mouse with adjustable DPI and programmable buttons."
+    },
+    {
+      "id": 14,
+      "name": "E-Reader",
+      "text": "Lightweight e-reader with glare-free screen, adjustable brightness, and long battery life."
+    },
+    {
+      "id": 15,
+      "name": "Wireless Charging Pad",
+      "text": "Qi-certified fast wireless charger compatible with most smartphones."
+    }
+  ]
+  

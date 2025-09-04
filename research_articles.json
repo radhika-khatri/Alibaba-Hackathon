@@ -1,0 +1,78 @@
+[
+    {
+      "paper_id": "A001",
+      "title": "Deep Learning for Natural Language Processing",
+      "text": "This paper explores how deep neural networks can be applied to NLP tasks including translation, summarization, and sentiment analysis."
+    },
+    {
+      "paper_id": "A002",
+      "title": "Quantum Computing in Cryptography",
+      "text": "We discuss the implications of quantum algorithms for breaking RSA encryption and the development of post-quantum cryptographic techniques."
+    },
+    {
+      "paper_id": "A003",
+      "title": "Robotics in Healthcare",
+      "text": "An overview of robotic applications in surgery, rehabilitation, and patient care, with a focus on AI-driven automation."
+    },
+    {
+      "paper_id": "A004",
+      "title": "Climate Change and Renewable Energy",
+      "text": "The study examines the role of wind, solar, and bioenergy in reducing carbon emissions globally."
+    },
+    {
+      "paper_id": "A005",
+      "title": "Blockchain for Supply Chain Transparency",
+      "text": "An analysis of blockchain solutions in logistics and how they improve traceability and trust."
+    },
+    {
+      "paper_id": "A006",
+      "title": "Augmented Reality in Education",
+      "text": "We review AR applications in classrooms and their impact on interactive learning experiences."
+    },
+    {
+      "paper_id": "A007",
+      "title": "Advancements in Autonomous Vehicles",
+      "text": "Discusses LiDAR, computer vision, and AI technologies enabling safe self-driving cars."
+    },
+    {
+      "paper_id": "A008",
+      "title": "Cybersecurity in IoT Devices",
+      "text": "A comprehensive look at vulnerabilities in IoT ecosystems and strategies to mitigate cyberattacks."
+    },
+    {
+      "paper_id": "A009",
+      "title": "AI in Precision Agriculture",
+      "text": "The paper explores how AI-powered drones and sensors optimize crop monitoring and yield prediction."
+    },
+    {
+      "paper_id": "A010",
+      "title": "Natural Disasters and Machine Learning",
+      "text": "Applications of ML models in predicting earthquakes, floods, and hurricanes."
+    },
+    {
+      "paper_id": "A011",
+      "title": "Space Exploration and Robotics",
+      "text": "Robotics innovations for planetary exploration, rover autonomy, and satellite servicing."
+    },
+    {
+      "paper_id": "A012",
+      "title": "Human-Computer Interaction Trends",
+      "text": "Explores multimodal interfaces, gesture recognition, and voice interaction in modern devices."
+    },
+    {
+      "paper_id": "A013",
+      "title": "Genomics and Artificial Intelligence",
+      "text": "The integration of AI in analyzing genomic data for personalized medicine."
+    },
+    {
+      "paper_id": "A014",
+      "title": "Green Computing",
+      "text": "A study on energy-efficient hardware and software approaches for sustainable computing."
+    },
+    {
+      "paper_id": "A015",
+      "title": "Ethics of Artificial General Intelligence",
+      "text": "Analyzes the societal and ethical challenges of AGI development and deployment."
+    }
+  ]
+  

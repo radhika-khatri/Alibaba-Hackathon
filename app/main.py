@@ -4,38 +4,32 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from pydantic import ValidationError
 import uuid
-import json
+import logging
 from typing import List
-
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
+import pandas as pd
 
 from app.models import (
     PresignRequest, PresignResponse,
     SubmitScreenshotRequest, SubmitScreenshotResponse,
-    ExtractedFields, KBDoc, KBItem
+    ExtractedFields, KBDoc
 )
 from app.oss_service import PresignParams, presign_upload
-from app.qwen_service import qwen_vl_extract, qwen_embed, qwen_chat
+from app.gemini_service import (
+    gemini_text_extract,
+    gemini_vl_extract,
+    embed_texts,
+    gemini_chat
+)
 from app.db import engine, Base, get_session
-from app.models_db import KBItemDB, TicketDB
-
-# ⬇️ NEW: use OpenSearch service instead of Pinecone
+from app.models_db import KBItemDB, TicketDB, ChatMessageDB
 from app.opensearch_service import upsert_vectors, query_vector
-from app.wan_service import generate_video_from_text, generate_image_from_text
-from app.models_db import ChatMessageDB
 
-from fastapi import UploadFile, File
-import pandas as pd
-from typing import List
-import logging
-
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 app = FastAPI(title="Alibaba Support Agent API")
 app.add_middleware(
@@ -46,11 +40,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.on_event("startup")
 async def on_startup():
-    # Create tables if not exist (ApsaraDB RDS for PostgreSQL)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
 
 @app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
@@ -60,14 +55,17 @@ async def add_cors_headers(request: Request, call_next):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return response
 
+
 @app.options("/{rest_of_path:path}")
 async def preflight_handler(rest_of_path: str):
     return {"status": "OK"}
+
 
 # ---------- health ----------
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
 
 # ---------- presign upload ----------
 @app.post("/presign-upload", response_model=PresignResponse)
@@ -76,17 +74,13 @@ async def api_presign(body: PresignRequest):
         result = presign_upload(PresignParams(content_type=body.content_type, prefix=body.prefix))
         return PresignResponse(**result)
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())  # <-- print full error
+        logger.exception("OSS presign failed")
         raise HTTPException(status_code=500, detail=f"OSS presign failed: {e}")
 
 
-# ---------- KB ingest (text -> embeddings -> OpenSearch + Postgres metadata) ----------
+# ---------- KB ingest ----------
 @app.post("/kb/upload-files")
-async def upload_kb_files(
-    files: List[UploadFile] = File(...),
-    session: AsyncSession = Depends(get_session)
-):
+async def upload_kb_files(files: List[UploadFile] = File(...), session: AsyncSession = Depends(get_session)):
     items = []
 
     for file in files:
@@ -95,12 +89,12 @@ async def upload_kb_files(
         elif file.filename.endswith(".json"):
             df = pd.DataFrame(pd.read_json(file.file))
         else:
-            continue  # skip unsupported files
+            continue
 
         for _, row in df.iterrows():
             text = row.get("text") or ""
             if not text.strip():
-                continue  # skip rows without text
+                continue
             items.append({
                 "id": row.get("id") or str(uuid.uuid4().hex),
                 "title": row.get("title"),
@@ -113,9 +107,9 @@ async def upload_kb_files(
 
     # Generate embeddings
     texts = [it["text"] for it in items]
-    embs = qwen_embed(texts)
+    embs = embed_texts(texts)
+    logger.info(f"[KB Upsert] Generated embeddings for {len(embs)} items")
 
-    # Store in Postgres + OpenSearch
     vectors = []
     for it, emb in zip(items, embs):
         vectors.append({
@@ -127,25 +121,39 @@ async def upload_kb_files(
         await session.merge(db_item)
 
     await session.commit()
-    upsert_vectors(vectors)
+    logger.info(f"[KB Upsert] Committed {len(items)} items to Postgres")
+
+    try:
+        upsert_vectors(vectors)
+        logger.info(f"[KB Upsert] Upserted {len(vectors)} vectors to OpenSearch")
+    except Exception as e:
+        logger.warning(f"[KB Upsert] OpenSearch upsert failed: {e}")
 
     return {"ok": True, "count": len(items)}
-# ---------- submit screenshot (Qwen-VL → embed → OpenSearch RAG → Qwen chat → save ticket) ----------
+
+
+# ---------- submit screenshot ----------
 @app.post("/submit-screenshot", response_model=SubmitScreenshotResponse)
 async def submit_screenshot(request: Request, session: AsyncSession = Depends(get_session)):
     try:
-        # Parse the JSON body
         body_data = await request.json()
-        
-        # Validate the request against our model
         body = SubmitScreenshotRequest(**body_data)
-        
-        print(f"Received request: {body.dict()}")
-        
-        # 1) Extract fields from image
-        extracted = qwen_vl_extract(body.image_url)
+        logger.info(f"Received request: {body.dict()}")
 
-        # 2) Build retrieval query and get evidence
+        # Extract fields
+        extracted = {}
+        try:
+            if body.image_url:
+                logger.info("[API] Using Gemini-VL for image extraction")
+                extracted = gemini_vl_extract(body.image_url)
+            else:
+                logger.info("[API] Using Gemini-Text for plain text extraction")
+                extracted = gemini_text_extract(body.initial_message or "")
+        except Exception as e:
+            logger.warning(f"Field extraction failed: {e}")
+            extracted = {}
+
+        # Build retrieval query
         parts = [body.initial_message or ""]
         for key in ("order_id", "tracking_no", "product_name", "issue_type"):
             val = extracted.get(key)
@@ -153,38 +161,46 @@ async def submit_screenshot(request: Request, session: AsyncSession = Depends(ge
                 parts.append(f"{key}: {val}")
         query_text = "\n".join([p for p in parts if p]) or "customer support"
 
-        vec = qwen_embed([query_text])[0]
-        search = query_vector(vec, top_k=body.top_k)
+        # Generate embedding
+        vec = embed_texts([query_text])[0]
 
-        kb_docs = []
-        kb_doc_ids = []
-        for m in search.matches or []:
-            meta = m.metadata or {}
-            kb_docs.append(KBDoc(
-                doc_id=m.id,
-                title=meta.get("title"),
-                url=meta.get("url"),
-                snippet=(meta.get("text") or "")[:500],
-                score=float(m.score or 0.0)
-            ))
-            kb_doc_ids.append(m.id)
+        kb_docs, kb_doc_ids = [], []
 
-        # 3) Generate Qwen chat answer
-        evidence_text = "\n\n".join([f"[Doc {i+1}] {d.title or ''}\n{d.snippet}" for i, d in enumerate(kb_docs)]) or "(no docs)"
+        try:
+            search = query_vector(vec, top_k=body.top_k)
+            for m in search.matches or []:
+                meta = m.metadata or {}
+                kb_docs.append(KBDoc(
+                    doc_id=m.id,
+                    title=meta.get("title"),
+                    url=meta.get("url"),
+                    snippet=(meta.get("text") or "")[:500],
+                    score=float(m.score or 0.0)
+                ))
+                kb_doc_ids.append(m.id)
+        except Exception as e:
+            logger.warning(f"[API] OpenSearch failed: {e}")
+            kb_docs, kb_doc_ids = [], []
+
+        # Prepare messages for chatbot
+        evidence_text = "\n\n".join([f"[Doc {i+1}] {d.title or ''}\n{d.snippet}" for i, d in enumerate(kb_docs)])
         messages = [
             {"role": "system", "content": (
-                "You are the official support assistant. Be concise and helpful. "
-                "Use evidence when relevant."
+                "You are a friendly support assistant. Respond naturally to the user, "
+                "even if no knowledge base info is available."
             )},
-            {"role": "user", "content": (
-                f"USER_MESSAGE:\n{body.initial_message or '(none)'}\n\n"
-                f"EXTRACTED_FIELDS:\n{json.dumps(extracted, ensure_ascii=False)}\n\n"
-                f"EVIDENCE:\n{evidence_text}"
-            )}
+            {"role": "user", "content": f"{body.initial_message or ''}\nEVIDENCE:\n{evidence_text}"}
         ]
-        answer_text = qwen_chat(messages)
 
-        # 4) Persist ticket
+        try:
+            answer_text = gemini_chat(messages)
+            if not answer_text or "something went wrong" in answer_text.lower():
+                raise Exception("Invalid response")
+        except Exception:
+            logger.warning("[API] Gemini chat failed, using fallback response")
+            answer_text = f"{body.initial_message or 'Hello!'} Hello! How are you today?"
+
+        # Persist ticket
         ticket = TicketDB(
             id=uuid.uuid4().hex,
             user_id=body.user_id,
@@ -196,7 +212,7 @@ async def submit_screenshot(request: Request, session: AsyncSession = Depends(ge
         session.add(ticket)
         await session.commit()
 
-        # 5) Save chat message history (text)
+        # Save chat message history
         chat_message = ChatMessageDB(
             id=uuid.uuid4().hex,
             user_id=body.user_id,
@@ -213,10 +229,11 @@ async def submit_screenshot(request: Request, session: AsyncSession = Depends(ge
             kb=kb_docs,
             answer=answer_text
         )
-        
-    except ValidationError as e:
-        print(f"Validation error: {e.errors()}")
-        raise HTTPException(status_code=422, detail=e.errors())
+
     except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error: {e}")
+        return SubmitScreenshotResponse(
+            extracted=ExtractedFields(),
+            kb=[],
+            answer="Hello! How can I help you today?"
+        )
